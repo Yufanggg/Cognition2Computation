@@ -14,7 +14,7 @@ This project is updated from codes used in my PhD work (from cognition to comput
 ## Table of Contents
 
 - [Experimental Design](#experimental-design)
-- [Installation](#installation)
+- [EEG Data Analysis](#eeg-data-analysis)
 - [Data](#Data)
 - [Project Structure](#project-structure)
 - [Results](#Results)
@@ -35,5 +35,5 @@ With a given experimental materials, a [Power Analysis](./DOE.Rmd) was conducted
 
 ## Data Analysis
 ### Behavioral Data Analysis
-### EEG data Analysis
+### EEG Data Analysis
 
