@@ -13,7 +13,7 @@ This project is updated from codes used in my PhD work (from cognition to comput
 
 ## Table of Contents
 
-- [Experimental Design](#ExperimentalDesign)
+- [Experimental Design](#experimental-design)
 - [Installation](#installation)
 - [Data](#Data)
 - [Project Structure](#project-structure)
