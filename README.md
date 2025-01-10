@@ -21,10 +21,9 @@ This project is updated from codes used in my PhD work (from cognition to comput
 
 ## Requirments
 To run this Project, you will need the following:
-- Python (> 3.6)
-- Pandas (pip install pandas)
-- Requests (pip install requests)
-- SQLAlchemy (pip install sqlalchemy)
+- R (> 3.6)
+<!-- - lmer (install.library("lmer")) 
+- lmerTest (install.library(")) --> 
 
 ## Installation
 
