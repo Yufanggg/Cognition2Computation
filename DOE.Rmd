@@ -1,0 +1,145 @@
+---
+title: "DOE_simulation"
+author: "Yufang Wang"
+date: "2023-04-18"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  word_document: default
+---
+
+```{r, include = TRUE}
+rm(list = ls())
+#input the documents
+setwd('E:/Exp02/EEGCode/')
+print(getwd())
+df <- read.csv('./Data/DesignStimulation_exp_.csv', encoding = 'UTF-8')
+head(df)
+
+
+Target = factor(df$Target)
+NumersofStroks = as.numeric(df$NumbersofStorks)
+Frequency = as.numeric(df$Frequency)
+JSD = factor(df$JSD)
+S = factor(df$SemanticCongruency)
+ClassifierCongruency = factor(df$ClassifierCongruency)
+DistLength = as.numeric(df$LengthofDistrctor)
+
+strokesModel = lm(NumersofStroks ~ JSD + ClassifierCongruency)
+summary(strokesModel)
+
+FrequencyModel = lm(Frequency ~ JSD + ClassifierCongruency)
+summary(FrequencyModel)
+
+DistLengthModel = lm(DistLength ~ JSD + ClassifierCongruency)
+summary(DistLengthModel)
+```
+
+
+```{r, echo=TRUE}
+Nsubj = 34
+NTrial = nrow(df)
+# Repeat the dataframe 34 times
+df_repeated <- do.call(rbind, replicate(34, df, simplify = FALSE))
+df_repeated$Subj = as.factor(rep(1:Nsubj, NTrial))
+head(df_repeated)
+```
+```{r, echo=TRUE, warning=FALSE}
+simulate_and_fit_model <- function(Nsubj = 34, df, beta0, beta1, beta2, beta3, tau, error) {
+  
+  NTrial = nrow(df)
+  # Repeat the dataframe 34 times
+  df_repeated <- do.call(rbind, replicate(Nsubj, df, simplify = FALSE))
+  df_repeated$Subj = as.factor(rep(1:Nsubj, NTrial))
+  df_repeated$Target = as.factor(df_repeated$Target)
+  df_repeated$Subj = as.factor(df_repeated$Target)
+  df_repeated$SemanticCongruency = as.factor(df_repeated$SemanticCongruency)
+  df_repeated$JSD = as.factor(df_repeated$JSD)
+  df_repeated$ClassifierCongruency = as.factor(df_repeated$ClassifierCongruency)
+  
+  head(df_repeated)
+  # Define coefficients
+  B <- c(beta0, beta1, beta2, beta3)
+  
+  # Generate random effects
+  gamma_ <- c(
+    rnorm(length(unique(df_repeated$Target)), mean = 0, sd = tau / 2),
+    rnorm(length(unique(df_repeated$Subj)) - 1, mean = 0, sd = tau)
+  )
+  
+  # Function to generate the data
+  simulated_y <- function(df_T, DesignMatrix, RandomM, B, gamma_) {
+    e <- rnorm(nrow(df_T), mean = 0, sd = error) # residual error
+    X <- DesignMatrix
+    y <- X %*% B + RandomM %*% gamma_ + e
+    return(y)
+  }
+  
+  # Create design matrices
+  DesignMatrix <- model.matrix(~ SemanticCongruency + JSD + ClassifierCongruency, data = df_repeated)
+  RandomM <- model.matrix(~ Target + Subj, data = df_repeated)
+  
+  # Generate the response variable
+  df_repeated$y <- simulated_y(df_repeated, DesignMatrix, RandomM, B, gamma_)
+  
+  # Fit the linear mixed model
+  library(lmerTest)
+  fitmodel <- lmer(y ~ SemanticCongruency + JSD + ClassifierCongruency + (1 | Target) + (1 | Subj), data = df_repeated, REML = TRUE)
+  # print(summary(fitmodel))
+  
+  # Extract p-value for the second coefficient
+  p_val <- summary(fitmodel)$coefficients[2, 5]
+  # print(p_val)
+  return(p_val)
+}
+
+# Example usage
+beta0 <- 870
+beta1 <- 8
+beta2 <- 0
+beta3 <- 0
+tau <- 3000
+error <- 30
+set.seed(123456)
+p_values <- replicate(1000, simulate_and_fit_model(Nsubj = 20, df, beta0, beta1, beta2, beta3, tau, error))
+mean(p_values < 0.05)
+```
+
+```{r, echo=TRUE}
+# Function to calculate mean p-values for different Nsubj
+calculate_mean_p_values <- function(Nsubj_values, df, beta0, beta1, beta2, beta3, tau, error) {
+  mean_p_values <- sapply(Nsubj_values, function(Nsubj) {
+    p_values <- replicate(1000, simulate_and_fit_model(Nsubj, df, beta0, beta1, beta2, beta3, tau, error))
+    mean(p_values < 0.05)
+  })
+  return(mean_p_values)
+}
+
+# Example usage
+beta0 <- 870
+beta1 <- 8
+beta2 <- 0
+beta3 <- 0
+tau <- 3000
+error <- 40 
+
+# Define the Nsubj values
+Nsubj_values <- c(10, 15, 20, 25, 30, 35, 40)
+
+# Calculate mean p-values
+mean_p_values <- calculate_mean_p_values(Nsubj_values, df, beta0, beta1, beta2, beta3, tau, error)
+print(mean_p_values)
+```
+```{r, echo=TRUE}
+png(filename = "PowerCurve.jpg", width = 5, height = 5, units = "in", res = 600)
+plot(Nsubj_values, mean_p_values, type = "p", col = "blue", pch = 19, 
+     xlim = c(5, 45), ylim = c(0, 1),
+     xlab = "Number of participants", ylab = "Power", 
+     main = "Power Curve to decide the number of participants")
+lines(Nsubj_values, mean_p_values, col = "red")
+abline(h = 0.8, col = "green", lty = 2)
+```
+
+
+
