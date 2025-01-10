@@ -3,16 +3,17 @@
 [![LinkedIn](https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555)](https://www.linkedin.com/in/yufang-w-1295881b5/) [![GitHub](https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white&colorB=555)](https://github.com/Yufanggg) <img alt="GitHub" src="https://img.shields.io/github/license/bopith/UnicornCompanies?style=for-the-badge"> 
 
 ## Overview
-This repository contains the ETL (Extract, Transform and load) data into a SQL database SQL queries and the slide presentation for the analytical project on COVID-19 pandemic for the US Analysis
+This repository contains the stimulated power analysis under linear mixed modelling setting, TFCE under linear mixed modelling setting. 
 
-This project aims at exploring the answers to the following questions:
-1. How have the positive and negative COVID-19 cases trended over time? Are there any noticeable spikes or drops in the number of positive or negative cases?
-2. How have the numbers of currently hospitalized and ICU patients changed over time? What are the trends in cumulative hospitalizations and ICU admissions?
-3. How complete is the data for each metric? Are there any metrics with significant amounts of missing data?
+This project is updated from codes used in my PhD work (from cognition to computation: an insight from word production) and aims to address the following research related questions:
+1. How to calculate the sample size in the experimental design with two fully-crossed random variables (e.g., within subject and within target word experimental design).
+2. How to extract the relationship of word patterns from a large-scale corpus?
+3. How to conduct the testing for datasets under high-dimensional setting (e.g., EEG data)?
+
 
 ## Table of Contents
 
-- [Requirements](#requirements)
+- [Experimental Design](#ExperimentalDesign)
 - [Installation](#installation)
 - [Data](#Data)
 - [Project Structure](#project-structure)
