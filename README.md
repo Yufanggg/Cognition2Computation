@@ -1,4 +1,5 @@
-﻿﻿# Cognitive2Computation
+
+# Cognitive2Computation
 
 ## Experimental Design
 
