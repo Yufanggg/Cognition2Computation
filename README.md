@@ -35,11 +35,18 @@ With a given experimental materials, a [Power Analysis](./DOE.Rmd) was conducted
 
 ## Data Analysis
 ### Behavioral Data Analysis
+The behavioral data analysis can be conducted:
+- `Exp02_BehaviouralAnalysis.Rmd`:
+
 ### EEG Data Analysis
 EEG data analysis includes: data preprocessing, feature extraction and statistcial modelling.
-This can be conducted with the code in the given steps: 
+
+##### EEG Data Preprocessing \& Feature Extraction can be conducted with the code in the given steps: 
 - `EEG_Step01_PreproEEG_Batch.m`:
 - `EEG_Step02_PreproEEG.m`:
 - `EEG_Step03_PreproRemovthreshold.m`:
 - `EEG_Step_04_ExploratoryERPPermutation.m`:
-- 
+
+##### EEG statistcial modelling can be conducted with the code in the given steps: 
+- `Exp02_ExploratoryERP.Rmd`:
+- `Exp02_ERPPlannedAnalysis.Rmd`:
