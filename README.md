@@ -15,7 +15,7 @@ This project is updated from codes used in my PhD work (from cognition to comput
 
 - [Experimental Design](#experimental-design)
 - [EEG Data Analysis](#eeg-data-analysis)
-- [Data](#Data)
+- [Data Analysis](#data-analysis)
 - [Project Structure](#project-structure)
 - [Results](#Results)
 
@@ -36,4 +36,10 @@ With a given experimental materials, a [Power Analysis](./DOE.Rmd) was conducted
 ## Data Analysis
 ### Behavioral Data Analysis
 ### EEG Data Analysis
-
+EEG data analysis includes: data preprocessing, feature extraction and statistcial modelling.
+This can be conducted with the code in the given steps: 
+- `EEG_Step01_PreproEEG_Batch.m`:
+- `EEG_Step02_PreproEEG.m`:
+- `EEG_Step03_PreproRemovthreshold.m`:
+- `EEG_Step_04_ExploratoryERPPermutation.m`:
+- 
