@@ -1,0 +1,193 @@
+---
+title: "Exp02_ERPPlannedAnalysis"
+author: "Yufang Wang"
+date: "2023-11-07"
+output: pdf_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls())
+setwd('E:/Exp02/EEGCode/')
+```
+
+# General Notes {.tabset}
+## Production Task (Bare Noun Naming in PWI) Native Chinese Speakers
+This experiment was consisted of familiarization, practice, and experimental sessions. The experimental sessions was not a balanced design, instead, the entire 2-by-2 orthogonal table was only partically filled. The feasibility of this design has been investigated in the file "DOE_v2.Rmd" and reported together with behavioral and electrophysiological results
+
+##Testing Details and Participants
+
+* Participants: 36 Native Chinese speakers in the Netherlands
+* Testing Period: March 2023 - May 2023
+
+## Setting up the working environment
+
+```{r Productionpackages, results = 'hide', include = FALSE, message = FALSE}
+# check where packages are looked for
+.libPaths()
+
+# Install and load packages if needed using pacman - reproducible
+pacman::p_load("lattice","lme4", "emmeans", "dplyr", "ggplot2", "knitr", "printr", "kableExtra", "plotly", "extrafont", "devtools", "tibble", "effects", "tidyverse", "lmerTest", "car", "patchwork", "DHARMa", "tidyr", "data.table", "ggsignif", "sjPlot", "ggeffects", "broom.mixed", "fst")
+
+# Prevent scientific notation
+options(scipen = 999)
+
+# Increase memory
+#memory.limit(70000) # only for Windows
+
+# Set options
+Sys.getlocale()
+Sys.setlocale("LC_ALL", "C") # deals with Spanish orthography
+#options(max.print = .Machine$integer.max)
+#options(datatable.print.topn = 450)
+
+# Set base theme
+theme_set(theme_minimal(base_size = 12))
+```
+
+# The Data {.tabset}
+```{r, echo=TRUE}
+```
+
+```{r Production Data preprocessing, include = FALSE}
+# Load the Sequence csv file
+SequenceEXP2 = fread("Exp02_SeqSI.csv", sep = ",")
+#remove the first 4 trials and  in each block
+wantseq = c(seq(5, 73), seq(78, 102))
+SequenceEXP2 = subset(SequenceEXP2, subset = ExpTrialList %in% wantseq)
+rm(wantseq);
+SequenceEXP2 <- SequenceEXP2[, -c("ExpTrialList")]
+head(SequenceEXP2)
+
+#get the "Target" and "Distractor" variable separately
+Target <- c(); Distractor <- c()
+for (rowID in 1:nrow(SequenceEXP2)){
+  Target <- c(Target, strsplit(as.character(SequenceEXP2[rowID, "SoundFile_Name"]), '_')[[1]][1])
+  Distractor <- c(Distractor, strsplit(as.character(SequenceEXP2[rowID, "SoundFile_Name"]), '_')[[1]][2])
+}
+SequenceEXP2$Target <- Target; SequenceEXP2$Distractor <- Distractor 
+rm(rowID); rm(Target); rm(Distractor); head(SequenceEXP2)
+
+# Load the Condition csv file
+DesignEXP2 = fread("DesignStimulation.csv", sep = ",")
+DesignEXP2 <- DesignEXP2[-which(DesignEXP2$Distractor == ""), ]
+DesignEXP2  <- DesignEXP2 [, -c("TargetC", "DistractorC")]
+DesignEXP2$Procedure <- "Chapter3"; head(DesignEXP2)
+
+#Load the semantic categories and number of storkes file for distractors
+SemCatEStork = fread("SemCatEStork.csv", sep = ",")
+
+DesignEXP2 <- merge(DesignEXP2, SemCatEStork, by = c("Target", "Distractor", "ClassifierCongruency", "JSD", "NumbersofStorks"))
+rm(SemCatEStork); head(DesignEXP2)
+
+# #Load the semantic categories and number of storkes file for distractors
+# FreqDistra <- fread("FreqDistra.csv", sep = ",")
+# FreqDistra <-  FreqDistra[, -c("DistractorC")]
+# 
+# DesignEXP2 <- merge(DesignEXP2, FreqDistra, by = c("Distractor"))
+# rm(FreqDistra); head(DesignEXP2)
+
+#replicated the dateframe across the subjects
+DesignEXP2Subj <- data.frame(sapply(DesignEXP2, rep.int, times = 36))
+DesignEXP2Subj$SubjID <- rep(11:46, each = 102)
+DesignEXP2Subj$Target = ifelse(as.character(DesignEXP2Subj$Targe) == "Alarm clock", "Alarmclock", as.character(DesignEXP2Subj$Targe))
+DesignEXP2Subj$Marker3 <- as.numeric(DesignEXP2Subj$Marker3)
+DesignSeq <- merge(SequenceEXP2, DesignEXP2Subj, by = c("SubjID", "Target", "Distractor", "Procedure", "Marker3"))
+rm(DesignEXP2); rm(DesignEXP2Subj); rm(SequenceEXP2); head(DesignSeq)
+
+# Load the  ERP csv file
+EEG = fread("Exp02_EEG.csv", sep = ",")
+Time = fread("Exp02_EEGtime.csv", sep = ",")
+colnames(EEG) <- c("SubjID", "Marker3", "Elec", factor(Time))
+# Check out first few columns
+head(EEG); 
+
+#replicated the dateframe across the elect
+DesignSeq2 = data.frame(sapply(DesignSeq, rep.int, times = 32))
+DesignSeq2$Elec = rep(unique(EEG$Elec), each = 3384)
+rm(DesignSeq)
+
+#merge together data
+DesignSeq2$SubjID = as.character(DesignSeq2$SubjID)
+EEG$SubjID = as.character(EEG$SubjID)
+EEG$Marker3 = as.character(EEG$Marker3)
+EEGExp2 = merge(EEG, DesignSeq2, by = c("SubjID", "Elec", "Marker3"))#the difference in row numbers is due to the excluding the warming-up trials
+head(EEGExp2)
+rm(DesignSeq2, EEG)
+
+#reshape the wide data into long in terms of time points
+library(reshape2)
+EEGExp2_Long = melt(EEGExp2, id.vars = c("SubjID", "Elec", "Marker3", "Distractor", "Procedure", "Target", "SoundFile_Name", "ClassifierCongruency", "JSD", "JSDValue",
+                                          "Condition", "CongruencySemanticCategories", "NumbersofStorks", "Frequency", "LengthofDistrctor"))
+head(EEGExp2_Long)
+colnames(EEGExp2_Long) = c("SubjID", "Elec", "Marker3", "Distractor", "Procedure", "Target", "SoundFile_Name", "ClassifierCongruency", "JSD", "JSDValue", "Condition", "CongruencySemanticCategories", "NumbersofStorks", "Frequency", "LengthofDistrctor", "TimPo", "Voltage")
+head(EEGExp2_Long)
+rm(EEGExp2)
+```
+
+
+
+#build up linear regression model in at 275-575 ms of "F3", "FC1", "FC5", "C3", "CP1", "CP5", "P3", "PO3", "F4", "FC2", "FC6", "C4", "CP2", "CP6", "P4","PO4"
+```{r}
+#Step 1: selected the time window and time electrodes
+WantedTime = seq(121,198, 1)
+WantedElec = c("F3", "FC1", "FC5", "C3", "CP1", "CP5", "P3", "PO3", "F4", "FC2", "FC6", "C4", "CP2", "CP6", "P4","PO4")
+EEGExp2_Long_Analysis = subset(EEGExp2_Long, subset = TimPo %in% WantedTime)
+EEGExp2_Long_Analysis = subset(EEGExp2_Long_Analysis, subset = Elec %in% WantedElec)
+rm(WantedTime, WantedElec, EEGExp2_Long)
+
+EEGExp2_Long_Analysis = subset(EEGExp2_Long_Analysis, SubjID != "12")
+EEGExp2_Long_Analysis = subset(EEGExp2_Long_Analysis, SubjID != "44")
+#Step 2: distribute the electrodes their locations
+
+EEGExp2_Long_Analysis$Elec = replace(EEGExp2_Long_Analysis$Elec, EEGExp2_Long_Analysis$Elec %in% c("F3", "FC1", "FC5", "C3"), "Others")
+EEGExp2_Long_Analysis$Elec = replace(EEGExp2_Long_Analysis$Elec, EEGExp2_Long_Analysis$Elec %in% c("CP1", "CP5", "P3", "PO3"), "Cp")#"Others")
+EEGExp2_Long_Analysis$Elec = replace(EEGExp2_Long_Analysis$Elec, EEGExp2_Long_Analysis$Elec %in% c("F4", "FC2", "FC6", "C4"), "Others")
+EEGExp2_Long_Analysis$Elec = replace(EEGExp2_Long_Analysis$Elec, EEGExp2_Long_Analysis$Elec %in% c("CP2", "CP6", "P4","PO4"), "Cp")
+
+head(EEGExp2_Long_Analysis)
+
+
+#Step 3: transform the variables into the wanted type
+EEGExp2_Long_Analysis$SubjID = as.factor(EEGExp2_Long_Analysis$SubjID)
+EEGExp2_Long_Analysis$Target = as.factor(EEGExp2_Long_Analysis$Target)
+EEGExp2_Long_Analysis$JSD = as.factor(EEGExp2_Long_Analysis$JSD)
+EEGExp2_Long_Analysis$CongruencySemanticCategories = as.factor(EEGExp2_Long_Analysis$CongruencySemanticCategories)
+EEGExp2_Long_Analysis$ClassifierCongruency = as.factor(EEGExp2_Long_Analysis$ClassifierCongruency)
+EEGExp2_Long_Analysis$NumbersofStorks = as.numeric(EEGExp2_Long_Analysis$NumbersofStorks)
+EEGExp2_Long_Analysis$NumbersofStorks = (EEGExp2_Long_Analysis$NumbersofStorks - mean(EEGExp2_Long_Analysis$NumbersofStorks))/sd(EEGExp2_Long_Analysis$NumbersofStorks)
+EEGExp2_Long_Analysis$Frequency = log(as.numeric(EEGExp2_Long_Analysis$Frequency))
+EEGExp2_Long_Analysis$Elec = as.factor(EEGExp2_Long_Analysis$Elec)
+EEGExp2_Long_Analysis$Voltage = as.numeric(EEGExp2_Long_Analysis$Voltage)
+EEGExp2_Long_Analysis$TimN = as.numeric(EEGExp2_Long_Analysis$TimPo)
+EEGExp2_Long_Analysis$TimN = (EEGExp2_Long_Analysis$TimN - mean(EEGExp2_Long_Analysis$TimN))/sd(EEGExp2_Long_Analysis$TimN)
+EEGExp2_Long_Analysis$LengthofDistrctor = as.numeric(EEGExp2_Long_Analysis$LengthofDistrctor)
+EEGExp2_Long_Analysis$LengthofDistrctor = (EEGExp2_Long_Analysis$LengthofDistrctor - mean(EEGExp2_Long_Analysis$LengthofDistrctor))/sd(EEGExp2_Long_Analysis$LengthofDistrctor)
+
+#sum coding
+contrasts(EEGExp2_Long_Analysis$JSD) = contr.sum(2)
+contrasts(EEGExp2_Long_Analysis$CongruencySemanticCategories) = contr.sum(2) 
+contrasts(EEGExp2_Long_Analysis$ClassifierCongruency) = contr.sum(2)
+contrasts(EEGExp2_Long_Analysis$Elec) = contr.treatment(2, base = 1)
+
+str(EEGExp2_Long_Analysis)
+```
+
+#Step 4: build up models
+```{r}
+ERPmodelElaborate = lmer(Voltage ~ TimN + Frequency + NumbersofStorks + CongruencySemanticCategories + LengthofDistrctor + Elec + ClassifierCongruency + JSD + CongruencySemanticCategories:ClassifierCongruency + ClassifierCongruency:Elec + JSD:Elec + (ClassifierCongruency + JSD|SubjID) + (ClassifierCongruency + JSD|Target), data = EEGExp2_Long_Analysis)
+#Warning: Model failed to converge with max|grad| = 0.0107442 (tol = 0.002, component 1)
+ERPmodel = lmer(Voltage ~ TimN + Frequency + NumbersofStorks + CongruencySemanticCategories + LengthofDistrctor + Elec + ClassifierCongruency + JSD +  CongruencySemanticCategories:ClassifierCongruency + ClassifierCongruency:Elec + JSD:Elec + (ClassifierCongruency + JSD|SubjID) + (1|Target), data = EEGExp2_Long_Analysis)
+#Warning: Model failed to converge with max|grad| = 0.00369462 (tol = 0.002, component 1)
+ERPmodel.minusCor = lmer(Voltage ~ TimN + Frequency + NumbersofStorks + CongruencySemanticCategories + LengthofDistrctor + Elec + ClassifierCongruency + JSD + CongruencySemanticCategories:ClassifierCongruency + ClassifierCongruency:Elec + JSD:Elec + (ClassifierCongruency + JSD||SubjID) + (1|Target), data = EEGExp2_Long_Analysis)
+#boundary (singular) fit: see help('isSingular')
+ERPmodel.minusJSD = lmer(Voltage ~ TimN + Frequency + NumbersofStorks + CongruencySemanticCategories + LengthofDistrctor + Elec + ClassifierCongruency + JSD + CongruencySemanticCategories:ClassifierCongruency + ClassifierCongruency:Elec + JSD:Elec + (ClassifierCongruency|SubjID) + (1|Target), data = EEGExp2_Long_Analysis)
+
+ERPmodel.minusAll = lmer(Voltage ~ TimN + Frequency + NumbersofStorks + CongruencySemanticCategories + LengthofDistrctor + Elec + ClassifierCongruency + JSD + CongruencySemanticCategories:ClassifierCongruency + ClassifierCongruency:Elec + JSD:Elec + (1|SubjID) + (1|Target), data = EEGExp2_Long_Analysis)
+lrt = anova(ERPmodel.minusJSD, ERPmodel.minusAll, refit = FALSE)$Chisq[2]
+0.5*pchisq(lrt, 2, lower.tail = FALSE) + 0.5*pchisq(lrt, 3, lower.tail = FALSE)
+summary(ERPmodel.minusAll)
+library(performance)
+model_performance(ERPmodel.minusAll)
+confint(ERPmodel.minusAll)
+save.image(file = "Exp02PlannedERPAnalysis3_.RData")
+```

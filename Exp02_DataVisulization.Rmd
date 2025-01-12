@@ -1,0 +1,628 @@
+---
+title: "Exp02_DataVisulization"
+author: "Yufang Wang"
+date: "2023-11-11"
+output: pdf_document
+---
+
+## Setting up the working environment
+
+```{r Productionpackages, results = 'hide', include = FALSE, message = FALSE}
+rm(list = ls())
+# check where packages are looked for
+.libPaths()
+
+# Install and load packages if needed using pacman - reproducible
+pacman::p_load("lattice","lme4", "emmeans", "dplyr", "ggplot2", "knitr", "printr", "kableExtra", "plotly", "extrafont", "devtools", "tibble", "effects", "tidyverse", "lmerTest", "car", "patchwork", "DHARMa", "tidyr", "data.table", "ggsignif", "sjPlot", "ggeffects", "broom.mixed", "fst")
+
+# Prevent scientific notation
+options(scipen = 999)
+
+# Increase memory
+memory.limit(70000) # only for Windows
+
+# Set options
+Sys.getlocale()
+Sys.setlocale("LC_ALL", "C") # deals with Spanish orthography
+#options(max.print = .Machine$integer.max)
+#options(datatable.print.topn = 450)
+
+# Set base theme
+theme_set(theme_minimal(base_size = 12))
+```
+
+```{r, Figure 1A}
+DutchGender = data.frame(Gender = c("Het", "De"), P = c(0, 1))
+ggplot(data = DutchGender, mapping = aes(x = Gender, y = P)) + 
+  geom_bar(stat = "identity",
+           fill =  "#FF8000", width = 0.15, color = "#F8E58C") +
+  geom_text(aes(label = P), vjust = 0.3) +
+  xlab("b. Grammatical gender for 'fabriek' (Dutch, factory)") +
+  ylab("Probability") + theme_bw() + theme(
+        legend.position = c(.99,.99),
+    legend.justification = c("right", "top"),
+    legend.text=element_text(face="plain", family="Times", colour="black",  
+                             size = 15),
+    legend.title=element_text(face="plain", family="Times", colour="black", 
+                              size = 15),
+    panel.grid = element_blank(), 
+    axis.text.x=element_text(family="Times",size = 12,face ="plain"),
+    axis.title.x=element_text(family="Times",size = 15,face = "plain"), 
+    axis.text.y=element_text(family="Times",size = 12, face = "plain"),
+    axis.title.y=element_text(family="Times",size = 15,face = "plain")
+)
+ggsave("Figure1b.jpg", width = 7, height = 3, dpi = 600)
+```
+
+```{r, Figure1B}
+NounClassifier = fread("Figure1Chinese.csv", header = TRUE, encoding = "UTF-8")
+classi = colnames(NounClassifier)
+head(NounClassifier)
+library(reshape2)
+NounClassifier_Long = melt(NounClassifier, id.vars = c("V1"))
+colnames(NounClassifier_Long) = c("Noun", "Classifiers", "P")
+rm(NounClassifier)
+
+
+NounClassifier_Long = NounClassifier_Long[NounClassifier_Long$P>0.05,c("Classifiers", "P")]
+NounClassifier_Long = rbind(NounClassifier_Long, data.frame(Classifiers = "其它", P = 1-sum(NounClassifier_Long$P)))
+ggplot(data = NounClassifier_Long, mapping = aes(x = Classifiers, y = P)) + 
+  geom_bar(stat = "identity",
+           fill = "#ff0000", width = 0.4, color = "#fe79d1") +
+  geom_text(aes(label = round(P, 3), vjust = 1))+
+  xlab("a. Classifiers for '工厂' (Mandarin, factory)") +
+  ylab("Probability") + theme_bw() + theme(
+        legend.position = c(.99,.99),
+    legend.justification = c("right", "top"),
+    legend.text=element_text(face="plain", family="Times", colour="black",  
+                             size = 15),
+    legend.title=element_text(face="plain", family="Times", colour="black", 
+                              size = 15),
+    panel.grid = element_blank(), 
+    axis.text.x=element_text(family="songti",size = 15,face ="plain"),
+    axis.title.x=element_text(family="Times",size = 18,face = "plain"), 
+    axis.text.y=element_text(family="Times",size = 12, face = "plain"),
+    axis.title.y=element_text(family="Times",size = 15,face = "plain")
+)
+ggsave("Figure1a.jpg", width = 7, height = 3, dpi = 600)
+```
+
+
+```{r, Figure 2}
+NounClassifier2 = read.csv("Figure1Chinese2.csv", header = TRUE, encoding = "UTF-8")
+colnames(NounClassifier2)  = classi 
+library(reshape2)
+NounClassifier_Long2 = melt(NounClassifier2, id.vars = c("V1"))
+colnames(NounClassifier_Long2) = c("Noun", "Classifiers", "P")
+rm(NounClassifier2)
+NounClassifier_Long2 = NounClassifier_Long2[NounClassifier_Long2$P>0.01,c("Noun", "Classifiers", "P")]
+
+for (noun in unique(NounClassifier_Long2$Noun)){
+  NounClassifier_Long2 = rbind(NounClassifier_Long2,data.frame(Noun = noun, Classifiers = "其它", P = 1- sum(NounClassifier_Long2[NounClassifier_Long2$Noun == noun, "P"])))
+}
+```
+
+```{r}
+library(ggplot2)
+NounClassifier_Long2$Noun = factor(NounClassifier_Long2$Noun, ordered = TRUE, levels = c("手臂", "飞虫", "工厂", "脚", "鳄鱼"))
+ggplot(data = NounClassifier_Long2, mapping = aes(x = Classifiers, y = P, color = Noun, fill = Noun)) + 
+  scale_fill_manual(values=c("飞虫" = "#a0a0a0", "工厂" ="#007fff", "脚" = "#30d5c8","手臂" ="#ff0000", "鳄鱼" = "#ddd2ec"))+
+ scale_color_manual(values=c("飞虫" = "#525252", "工厂" ="#0000ff", "脚" = "#00a15c","手臂" ="#ff0000", "鳄鱼" = "#4a2d9f"))+
+  geom_bar(stat = "identity") +
+  xlab("Classifiers") +
+  ylab("Probabilities")  +
+ theme_bw() +  
+  theme(legend.position = "bottom",
+    legend.text=element_text(face="plain", family="Times", colour="black",
+                             size = 15),
+    legend.title=element_text(face="plain", family="Times", colour="black",
+                              size = 15),
+    panel.grid = element_blank(),
+    axis.text.x=element_text(family="Times",size = 14,face ="plain"),
+    axis.title.x=element_text(family="Times",size = 15,face = "plain"),
+    axis.text.y=element_text(family="Times",size = 14, face = "plain"),
+    axis.title.y=element_text(family="Times",size = 15,face = "plain")) +
+facet_grid(vars(Noun))
+ggsave("Figure2.pdf", width = 9, height = 7, dpi = 600)
+```
+
+```{r, Figure 10}
+library(ggplot2)
+ggplot(data = NounClassifier_Long2[NounClassifier_Long2$Noun == "凉鞋",], mapping = aes(x = Classifiers, y = P)) + 
+  geom_bar(stat = "identity", fill = "#ff0000", width = 0.4, color = "#fe79d1") +
+  xlab("Classifiers") +
+  ylab("Probabilities")  +
+  xlab("Classifiers for '凉鞋' (Mandarin, arm)") +
+  ylab("Probability") +
+ theme_bw() +  
+  theme(legend.position = "bottom",
+    legend.text=element_text(face="plain", family="Times", colour="black",
+                             size = 15),
+    legend.title=element_text(face="plain", family="Times", colour="black",
+                              size = 15),
+    panel.grid = element_blank(),
+    axis.text.x=element_text(family="Times",size = 12,face ="plain"),
+    axis.title.x=element_text(family="Times",size = 15,face = "plain"),
+    axis.text.y=element_text(family="Times",size = 12, face = "plain"),
+    axis.title.y=element_text(family="Times",size = 15,face = "plain"))
+ggsave("G:/PhDbook/Exp02Writing/LanguagecognitionNeuroscience/Figure10.pdf", width = 9, height = 7, dpi = 600)
+```
+
+```{r, Figure 6}
+rm(list = ls())
+load(file = "Exp02BehavioralAnalysis.RData")
+#making figure 6 for accuracies without leaving 3sd out
+```
+
+```{r, Figure 7}
+#making figure 7 for naming latencies with leaving 3sd out
+LatencyFig = BehavioralExp_onlyExp_RT[, c("JSD", "ClassifierCongruency", "tResp")]
+LatencyFig$JSD = ifelse(LatencyFig$JSD == "H", "Dissimilar", "Similar")
+library(reshape2)
+LatencyFig_Long = melt(LatencyFig, id.vars = c("tResp"))
+colnames(LatencyFig_Long) = c("Latency", "variable", "Conditions")
+head(LatencyFig_Long)
+
+library(ggplot2)
+library(ggsignif)
+
+GeomSplitViolin <- ggproto(
+  "GeomSplitViolin", 
+  GeomViolin, 
+  draw_group = function(self, data, ..., draw_quantiles = NULL) {
+    data <- transform(data, 
+                      xminv = x - violinwidth * (x - xmin), 
+                      xmaxv = x + violinwidth * (xmax - x))
+    grp <- data[1,'group']
+    newdata <- plyr::arrange(
+      transform(data, x = if(grp%%2==1) xminv else xmaxv), 
+      if(grp%%2==1) y else -y
+    )
+    newdata <- rbind(newdata[1, ], newdata, newdata[nrow(newdata), ], newdata[1, ])
+    newdata[c(1,nrow(newdata)-1,nrow(newdata)), 'x'] <- round(newdata[1, 'x']) 
+    if (length(draw_quantiles) > 0 & !scales::zero_range(range(data$y))) {
+      stopifnot(all(draw_quantiles >= 0), all(draw_quantiles <= 1))
+      quantiles <- ggplot2:::create_quantile_segment_frame(data, draw_quantiles)
+      aesthetics <- data[rep(1, nrow(quantiles)), setdiff(names(data), c("x", "y")), drop = FALSE]
+      aesthetics$alpha <- rep(1, nrow(quantiles))
+      both <- cbind(quantiles, aesthetics)
+      quantile_grob <- GeomPath$draw_panel(both, ...)
+      ggplot2:::ggname("geom_split_violin", 
+                       grid::grobTree(GeomPolygon$draw_panel(newdata, ...), quantile_grob))
+    } else {
+      ggplot2:::ggname("geom_split_violin", GeomPolygon$draw_panel(newdata, ...))
+    }
+  }
+)
+
+
+geom_split_violin <- function (mapping = NULL, 
+                               data = NULL, 
+                               stat = "ydensity", 
+                               position = "identity", ..., 
+                               draw_quantiles = NULL, 
+                               trim = TRUE, 
+                               scale = "area", 
+                               na.rm = FALSE, 
+                               show.legend = NA, 
+                               inherit.aes = TRUE) {
+  layer(data = data, 
+        mapping = mapping, 
+        stat = stat, 
+        geom = GeomSplitViolin, 
+        position = position, 
+        show.legend = show.legend, 
+        inherit.aes = inherit.aes, 
+        params = list(trim = trim, 
+                      scale = scale, 
+                      draw_quantiles = draw_quantiles, 
+                      na.rm = na.rm, ...)
+  )
+}
+##----------------get the function
+LatencyFig_Long$Conditions = factor(LatencyFig_Long$Conditions, levels = c("Dissimilar", "Similar", "Incongruent", "Congruent"))
+
+ggplot(LatencyFig_Long,aes(x = variable,y = Latency,color = Conditions, fill = Conditions))+
+  geom_split_violin(trim=FALSE,color="white")+ geom_boxplot(width=0.2,position=position_dodge(0.9))+
+  scale_fill_manual(values = c("Dissimilar" = "#99CC99", "Similar" ="#F8E58C", "Incongruent" = "#AECCF2", "Congruent" = "#fe79d1"))+
+ scale_color_manual(values = c("Dissimilar" = "#44B159", "Similar" ="#FF8000", "Incongruent" = "#0000ff","Congruent" = "#ff0000"))+
+  geom_hline(yintercept = median(LatencyFig_Long$Latency), linetype = 2) +
+  geom_signif(comparisons = list(c("H", "L")), 
+              map_signif_level=TRUE) + 
+  # geom_signif(comparisons = list(c("Incongruent", "congruent")), 
+  #             map_signif_level=TRUE)
+  theme_bw()+ 
+  theme( legend.position = c(0.5,0.05), 
+         legend.direction = "horizontal",
+    axis.text.x=element_text(hjust = 0.5,colour="black",family="Times",size=15),
+    axis.title.x=element_text(family="Times",size = 20,face="plain"),
+        axis.text.y=element_text(family="Times",size=20,face="plain"),
+        axis.title.y=element_text(family="Times",size = 20,face="plain"),
+        panel.grid = element_blank(), 
+        legend.text=element_text(face="plain", family="Times", colour="black",
+                                 size=15),
+        legend.title=element_text(face="plain", family="Times", colour="black",
+                                  size=15),
+        panel.grid.major = element_blank(),   #
+        panel.grid.minor = element_blank())+
+  ylab("Naming latencies (ms)") +
+  xlab("") + 
+  ylim(0, 2000)
+ggsave("Figure5.pdf", width = 8, height = 10, dpi = 600)
+```
+
+
+```{r, Figure 7 Another type}
+
+library(ggplot2)
+ggplot(data = LatencyFig_Long, mapping = aes(x = variable, y = Latency, color = values, fill = values)) +
+  geom_boxplot() +
+  scale_fill_manual(values=c("H" = "#a0a0a0", "L" ="#007fff", "Incongruent" = "#30d5c8","Congruent" = "#ddd2ec"))+
+ scale_color_manual(values=c("H" = "#525252", "L" ="#0000ff", "Incongruent" = "#00a15c","Congruent" = "#4a2d9f"))+
+  xlab("") +
+  ylab("Naming Latencies")  +
+  ylim(0, 2000)
+ theme_bw() + theme(legend.position = "bottom",
+    legend.text=element_text(face="plain", family="Times", colour="black",
+                             size = 15),
+    legend.title=element_text(face="plain", family="Times", colour="black",
+                              size = 15),
+    panel.grid = element_blank(),
+    axis.text.x=element_text(family="Times",size = 12,face ="plain"),
+    axis.title.x=element_text(family="Times",size = 15,face = "plain"),
+    axis.text.y=element_text(family="Times",size = 12, face = "plain"),
+    axis.title.y=element_text(family="Times",size = 15,face = "plain"))
+```
+
+```{r, Figure 8, ERP lines}
+rm(list = ls())
+setwd('E:/Exp02/EEGCode/')
+# Load the Sequence csv file
+SequenceEXP2 = fread("Exp02_SeqSI.csv", sep = ",")
+#remove the first 4 trials and  in each block
+wantseq = c(seq(5, 73), seq(78, 102))
+SequenceEXP2 = subset(SequenceEXP2, subset = ExpTrialList %in% wantseq)
+rm(wantseq);
+SequenceEXP2 <- SequenceEXP2[, -c("V1", "ExpTrialList")]
+head(SequenceEXP2)
+
+#get the "Target" and "Distractor" variable separately
+Target <- c(); Distractor <- c()
+for (rowID in 1:nrow(SequenceEXP2)){
+  Target <- c(Target, strsplit(as.character(SequenceEXP2[rowID, 4]), '_')[[1]][1])
+  Distractor <- c(Distractor, strsplit(as.character(SequenceEXP2[rowID, 4]), '_')[[1]][2])
+}
+SequenceEXP2$Target <- Target; SequenceEXP2$Distractor <- Distractor 
+rm(rowID); rm(Target); rm(Distractor); head(SequenceEXP2)
+
+# Load the Condition csv file
+DesignEXP2 = fread("DesignStimulation.csv", sep = ",")
+DesignEXP2 <- DesignEXP2[-which(DesignEXP2$Distractor == ""), ]
+DesignEXP2  <- DesignEXP2 [, -c("TargetC", "DistractorC")]
+DesignEXP2$Procedure <- "Chapter3"; head(DesignEXP2)
+
+#Load the semantic categories and number of storkes file for distractors
+SemCatEStork = fread("SemCatEStork.csv", sep = ",")
+
+DesignEXP2 <- merge(DesignEXP2, SemCatEStork, by = c("Target", "Distractor", "ClassifierCongruency", "JSD"))
+rm(SemCatEStork); head(DesignEXP2)
+
+#Load the semantic categories and number of storkes file for distractors
+FreqDistra <- fread("FreqDistra.csv", sep = ",")
+FreqDistra <-  FreqDistra[, -c("DistractorC")]
+
+DesignEXP2 <- merge(DesignEXP2, FreqDistra, by = c("Distractor"))
+rm(FreqDistra); head(DesignEXP2)
+
+#replicated the dateframe across the subjects
+DesignEXP2Subj <- data.frame(sapply(DesignEXP2, rep.int, times = 36))
+DesignEXP2Subj$SubjID <- rep(11:46, each = 102)
+DesignEXP2Subj$Target = ifelse(as.character(DesignEXP2Subj$Targe) == "Alarm clock", "Alarmclock", as.character(DesignEXP2Subj$Targe))
+DesignEXP2Subj$Marker3 <- as.numeric(DesignEXP2Subj$Marker3)
+DesignSeq <- merge(SequenceEXP2, DesignEXP2Subj, by = c("SubjID", "Target", "Distractor", "Procedure", "Marker3"))
+rm(DesignEXP2); rm(DesignEXP2Subj); rm(SequenceEXP2); head(DesignSeq)
+
+# Load the  ERP csv file
+EEG = fread("Exp02_EEG.csv", sep = ",")
+Time = fread("Exp02_EEGtime.csv", sep = ",")
+colnames(EEG) <- c("SubjID", "Marker3", "Elec", factor(Time))
+# Check out first few columns
+head(EEG); 
+
+#replicated the dateframe across the elect
+DesignSeq2 = data.frame(sapply(DesignSeq, rep.int, times = 32))
+DesignSeq2$Elec = rep(unique(EEG$Elec), each = 3384)
+rm(DesignSeq)
+
+#merge together data
+DesignSeq2$SubjID = as.character(DesignSeq2$SubjID)
+EEG$SubjID = as.character(EEG$SubjID)
+EEG$Marker3 = as.character(EEG$Marker3)
+EEGExp2 = merge(EEG, DesignSeq2, by = c("SubjID", "Elec", "Marker3"))#the difference in row numbers is due to the excluding the warming-up trials
+head(EEGExp2)
+rm(DesignSeq2, EEG)
+
+#reshape the wide data into long in terms of time points
+library(reshape2)
+EEGExp2_Long = melt(EEGExp2, id.vars = c("SubjID", "Elec", "Marker3", "Distractor", "Procedure", "Target", "SoundFile_Name", "ClassifierCongruency", "JSD", "JSDValue",
+                                          "Condition", "CongruencySemanticCategories", "NumbersofStorks", "Frequency"))
+head(EEGExp2_Long)
+colnames(EEGExp2_Long) = c("SubjID", "Elec", "Marker3", "Distractor", "Procedure", "Target", "SoundFile_Name", "ClassifierCongruency", "JSD", "JSDValue", "Condition", "CongruencySemanticCategories", "NumbersofStorks", "Frequency", "TimPo", "Voltage")
+head(EEGExp2_Long)
+rm(EEGExp2)
+
+```
+#Figure 7
+```{r}
+#Step 1: selected the time window and time electrodes
+#WantedTime = seq(121,198, 1)
+WantedElec = c("CP5", "CP1", "P3", "PO3", "CP2", "CP6", "P4","PO4")
+EEGExp2_Long_Figure8 = subset(EEGExp2_Long, subset = Elec %in% WantedElec)
+EEGExp2_Long_Figure8 = EEGExp2_Long_Figure8[, c("JSD", "ClassifierCongruency", "Elec", "Voltage", "TimPo")]
+library(reshape2)
+EEGExp2_Long_Figure8_Long = melt(EEGExp2_Long_Figure8, id.vars = c("Elec", "Voltage", "TimPo"))
+colnames(EEGExp2_Long_Figure8_Long) = c("Channel", "Voltage", "Timpo", "Variables", "Conditions")
+head(EEGExp2_Long_Figure8_Long)
+
+EEGExp2_Long_Figure8_Long2 <- aggregate(EEGExp2_Long_Figure8_Long$Voltage, 
+                                                       list(EEGExp2_Long_Figure8_Long$Timpo, EEGExp2_Long_Figure8_Long$Conditions), mean)
+
+colnames(EEGExp2_Long_Figure8_Long2) <- c("Timef", "Condition", "Voltage")
+EEGExp2_Long_Figure8_Long2$Conditions = factor(EEGExp2_Long_Figure8_Long2$Condition, levels = c("H", "L", "Incongruent", "Congruent"))
+
+head(EEGExp2_Long_Figure8_Long2)
+EEGExp2_Long_Figure8_Long2$Timef = as.numeric(EEGExp2_Long_Figure8_Long2$Timef)
+```
+## Figure 7B
+```{r}
+EEGExp2_Long_Figure8_Long2DC = subset(EEGExp2_Long_Figure8_Long2, EEGExp2_Long_Figure8_Long2$Condition %in% c("Incongruent", "Congruent"))
+ggplot(data = EEGExp2_Long_Figure8_Long2DC, mapping = aes(x = Timef, y = Voltage, group = Conditions, colour = Conditions)) + 
+  geom_rect(aes(xmin = 121, xmax = 198, ymin = -4, ymax = 12), color = NA, fill = "#CCCCCC") +
+   geom_line(aes(group = Conditions, linetype = Conditions), size = 0.8) + 
+  # changing the background panel to white panel with grey gridlines
+  theme_bw() + 
+  
+  scale_x_continuous(breaks = c(1, 52, 103, 154, 206, 230),
+                   labels = c(-200, 0, 200, 400, 600, 700)) +
+  # setting lty and width
+  # using the colorblind-friendly palette (grey)
+  # scale_colour_manual(values = cbPalette) +  
+  scale_color_manual(values=c("#ff0000", "#0000ff")) +
+  # reversing the y-axis
+  ylim(12, -4) +  
+  xlab("Time (in ms)") +
+  ylab(expression(paste(mu, 'V'))) +
+  # setting up x- and y-axis
+  geom_hline(aes(yintercept = 0), colour="darkgrey") +
+  geom_vline(aes(xintercept = 52), colour="darkgrey") +
+  # adding titles and axis lables in desired colors/sizes
+  # #00659d blue color font used in LUCL poster template
+  # ggtitle("Voltage for Averaged Channels between the dominant classifier congruency") +
+  theme(plot.title = element_text(size = 15, face="bold", colour = '#00659d'),
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 12, face = "bold", colour = '#00659d'),
+        legend.position = c(0.92,0.8),
+        panel.border = element_blank())
+ggsave(filename = "G:/PhDbook/Exp02Writing/Fig.5.jpeg", dpi = 600)
+```
+## Figure 7A
+```{r}
+EEGExp2_Long_Figure8_Long2CD = subset(EEGExp2_Long_Figure8_Long2, EEGExp2_Long_Figure8_Long2$Condition %in% c("H", "L"))
+EEGExp2_Long_Figure8_Long2CD$Condition = ifelse(EEGExp2_Long_Figure8_Long2CD$Conditions == "H", "Dissimilar", "Similar")
+ggplot(data = EEGExp2_Long_Figure8_Long2CD, mapping = aes(x = Timef, y = Voltage, group = Condition, colour = Condition)) + 
+  geom_rect(aes(xmin = 121, xmax = 199, ymin = -4, ymax = 12), color = NA, fill = "#CCCCCC") +
+   geom_line(aes(group = Condition, linetype = Condition), size = 0.8) + 
+  # changing the background panel to white panel with grey gridlines
+  theme_bw() + 
+  
+  scale_x_continuous(breaks = c(1, 52, 103, 154, 206, 230),
+                   labels = c(-200, 0, 200, 400, 600, 700)) +
+  # setting lty and width
+  # using the colorblind-friendly palette (grey)
+  # scale_colour_manual(values = cbPalette) +  
+  scale_color_manual(values=c("#00b200", "#FF8C00")) +
+  # reversing the y-axis
+  ylim(12, -4) +  
+  xlab("Time (in ms)") +
+  ylab(expression(paste(mu, 'V'))) +
+  # setting up x- and y-axis
+  geom_hline(aes(yintercept = 0), colour="darkgrey") +
+  geom_vline(aes(xintercept = 52), colour="darkgrey") +
+  # adding titles and axis lables in desired colors/sizes
+  # #00659d blue color font used in LUCL poster template
+  # ggtitle("Voltage for Averaged Channels between the dominant classifier congruency") +
+  theme(plot.title = element_text(size = 15, face="bold", colour = '#00659d'),
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 12, face = "bold", colour = '#00659d'),
+        legend.position = c(0.92,0.8),
+        panel.border = element_blank())
+ggsave(filename = "G:/PhDbook/Exp02Writing/Fig.6.jpeg", dpi = 600)
+```
+
+# Figure 9
+```{r}
+WantedElec = c("T7", "CP5", "P7", "P3", "Pz", "PO3", "O1", "PO4")
+EEGExp2_Long_Figure9 = subset(EEGExp2_Long, subset = Elec %in% WantedElec)
+EEGExp2_Long_Figure9 = EEGExp2_Long_Figure9[, c("JSD", "ClassifierCongruency", "Elec", "Voltage", "TimPo")]
+library(reshape2)
+EEGExp2_Long_Figure9_Long = melt(EEGExp2_Long_Figure9, id.vars = c("Elec", "Voltage", "TimPo"))
+colnames(EEGExp2_Long_Figure9_Long) = c("Channel", "Voltage", "Timpo", "Variables", "Conditions")
+head(EEGExp2_Long_Figure9_Long)
+
+
+EEGExp2_Long_Figure9_Long <- aggregate(EEGExp2_Long_Figure9_Long$Voltage, 
+                                                       list(EEGExp2_Long_Figure9_Long$Timpo, EEGExp2_Long_Figure9_Long$Conditions), mean)
+
+colnames(EEGExp2_Long_Figure9_Long) <- c("Timef", "Condition", "Voltage")
+EEGExp2_Long_Figure9_Long$Conditions = factor(EEGExp2_Long_Figure9_Long$Condition, levels = c("H", "L", "Incongruent", "Congruent"))
+
+head(EEGExp2_Long_Figure9_Long)
+EEGExp2_Long_Figure9_Long$Timef = as.numeric(EEGExp2_Long_Figure9_Long$Timef)
+```
+## Figgure 9A
+```{r}
+EEGExp2_Long_Figure9_Long2CD = subset(EEGExp2_Long_Figure9_Long, EEGExp2_Long_Figure9_Long$Conditions %in% c("H", "L"))
+EEGExp2_Long_Figure9_Long2CD$Condition = ifelse(EEGExp2_Long_Figure9_Long2CD$Conditions == "H", "Dissimilar", "Similar")
+
+
+ggplot(data = EEGExp2_Long_Figure9_Long2CD, mapping = aes(x = Timef, y = Voltage, group = Conditions, colour = Condition)) + 
+  geom_rect(aes(xmin = 121, xmax = 161, ymin = -4, ymax = 10), color = NA, fill = "#CCCCCC") +
+   geom_line(aes(group = Condition, linetype = Condition), size = 0.8) + 
+  # changing the background panel to white panel with grey gridlines
+  theme_bw() + 
+  
+  scale_x_continuous(breaks = c(1, 52, 103, 154, 206, 230),
+                   labels = c(-200, 0, 200, 400, 600, 700)) +
+  # setting lty and width
+  # using the colorblind-friendly palette (grey)
+  # scale_colour_manual(values = cbPalette) +  
+  scale_color_manual(values=c("#00b200", "#FF8C00")) +
+  # reversing the y-axis
+  ylim(10, -4) +  
+  xlab("Time (in ms)") +
+  ylab(expression(paste(mu, 'V'))) +
+  # setting up x- and y-axis
+  geom_hline(aes(yintercept = 0), colour="darkgrey") +
+  geom_vline(aes(xintercept = 52), colour="darkgrey") +
+  # adding titles and axis lables in desired colors/sizes
+  # #00659d blue color font used in LUCL poster template
+  # ggtitle("Voltage for Averaged Channels between the dominant classifier congruency") +
+  theme(plot.title = element_text(size = 15, face="bold", colour = '#00659d'),
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 12, face = "bold", colour = '#00659d'),
+        legend.position = c(0.92,0.8),
+        panel.border = element_blank())
+```
+
+## Figgure 9B
+```{r}
+EEGExp2_Long_Figure9_Long2DC = subset(EEGExp2_Long_Figure9_Long, EEGExp2_Long_Figure9_Long$Condition %in% c("Congruent", "Incongruent"))
+
+
+ggplot(data = EEGExp2_Long_Figure9_Long2DC, mapping = aes(x = Timef, y = Voltage, group = Condition, colour = Condition)) + 
+  geom_rect(aes(xmin = 121, xmax = 161, ymin = -4, ymax = 10), color = NA, fill = "#CCCCCC") +
+   geom_line(aes(group = Condition, linetype = Condition), size = 0.8) + 
+  # changing the background panel to white panel with grey gridlines
+  theme_bw() + 
+  
+  scale_x_continuous(breaks = c(1, 52, 103, 154, 206, 230),
+                   labels = c(-200, 0, 200, 400, 600, 700)) +
+  # setting lty and width
+  # using the colorblind-friendly palette (grey)
+  # scale_colour_manual(values = cbPalette) +  
+  scale_color_manual(values=c("#ff0000", "#0000ff")) +
+  # reversing the y-axis
+  ylim(10, -4) +  
+  xlab("Time (in ms)") +
+  ylab(expression(paste(mu, 'V'))) +
+  # setting up x- and y-axis
+  geom_hline(aes(yintercept = 0), colour="darkgrey") +
+  geom_vline(aes(xintercept = 52), colour="darkgrey") +
+  # adding titles and axis lables in desired colors/sizes
+  # #00659d blue color font used in LUCL poster template
+  # ggtitle("Voltage for Averaged Channels between the dominant classifier congruency") +
+  theme(plot.title = element_text(size = 15, face="bold", colour = '#00659d'),
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 12, face = "bold", colour = '#00659d'),
+        legend.position = c(0.92,0.8),
+        panel.border = element_blank())
+```
+## Figure 6a
+```{r}
+EEGExp2_Long_Figure8_Long2$Condition = factor(EEGExp2_Long_Figure8_Long2$Condition, 
+                                              levels = c("Congruent", "H", "Incongruent", "L"), labels = c("Congruent", "Dissimilar", "Incongruent", "Similar"))
+ggplot(data = EEGExp2_Long_Figure8_Long2, mapping = aes(x = Timef, y = Voltage, group = Condition, colour = Condition)) + 
+  geom_rect(aes(xmin = 121, xmax = 198, ymin = -4, ymax = 10), color = NA, fill = "#CCCCCC") +
+   geom_line(aes(group = Condition, linetype = Condition), size = 0.8) + 
+  # changing the background panel to white panel with grey gridlines
+  theme_bw() + 
+  
+  scale_x_continuous(breaks = c(1, 52, 103, 154, 206, 230),
+                   labels = c(-200, 0, 200, 400, 600, 700)) +
+  # setting lty and width
+  # using the colorblind-friendly palette (grey)
+  # scale_colour_manual(values = cbPalette) +  
+  scale_color_manual(values=c("#ff0000", "#0000ff", "#00b200", "#FF8C00")) +
+  # reversing the y-axis
+  ylim(10, -4) +  
+  xlab("Time (in ms)") +
+  ylab(expression(paste(mu, 'V'))) +
+  # setting up x- and y-axis
+  geom_hline(aes(yintercept = 0), colour="darkgrey") +
+  geom_vline(aes(xintercept = 52), colour="darkgrey") +
+  # adding titles and axis lables in desired colors/sizes
+  # #00659d blue color font used in LUCL poster template
+  # ggtitle("Voltage for Posterior Channels") + 
+  theme(plot.title = element_text(size = 20, face="bold", colour = '#00659d'),
+        axis.text = element_text(size = 15),
+        axis.title = element_text(size = 15, face = "bold", colour = '#00659d'),
+        legend.position = "bottom",
+        panel.border = element_blank()) + facet_grid()
+ggsave("Figure6.jpg", width = 8, height = 6, dpi = 200)
+```
+
+#Figure 6b
+```{r, echo=TRUE}
+rm(list = ls())
+load(file = "Exp02PlannedERPAnalysis.RData")
+
+library(effects)
+library(sjPlot)
+
+
+plot_model(ERPmodel.minusAll, type = c("est"), terms = c("ClassifierCongruency", "JSD"), ci.lvl = 0.95)
+
+plot_model(ERPmodel.minusAll, ci.lvl = 0.95, group.terms = c("ClassifierCongruency", "JSD"))
+ggsave("Figure7a.jpg", width = 10, height = 3, dpi = 200)
+```
+
+# Figure 8
+```{r, echo=TRUE}
+EEGExp2_Long_Figure9_Long$Conditions = factor(EEGExp2_Long_Figure9_Long$Conditions, levels = c("H", "L", "Incongruent", "Congruent"), labels = c("Dissimilar", "Similar", "Incongruent", "Congruent"))
+EEGExp2_Long_Figure9_Long$Timef = as.numeric(EEGExp2_Long_Figure9_Long$Timef)
+  
+
+
+ggplot(data = EEGExp2_Long_Figure9_Long, mapping = aes(x = Timef, y = Voltage, group = Conditions, colour = Conditions)) + 
+  geom_rect(aes(xmin = 121, xmax = 161, ymin = -4, ymax = 10), color = NA, fill = "#CCCCCC") +
+   geom_line(aes(group = Conditions, linetype = Conditions), size = 0.8) + 
+  # changing the background panel to white panel with grey gridlines
+  theme_bw() + 
+  
+  scale_x_continuous(breaks = c(1, 52, 103, 154, 206, 230),
+                   labels = c(-200, 0, 200, 400, 600, 700)) +
+  # setting lty and width
+  # using the colorblind-friendly palette (grey)
+  # scale_colour_manual(values = cbPalette) +  
+ scale_color_manual(values=c("#ff0000", "#0000ff", "#00b200", "#FF8C00")) +
+  # reversing the y-axis
+  ylim(10, -4) +  
+  xlab("Time (in ms)") +
+  ylab(expression(paste(mu, 'V'))) +
+  # setting up x- and y-axis
+  geom_hline(aes(yintercept = 0), colour="darkgrey") +
+  geom_vline(aes(xintercept = 52), colour="darkgrey") +
+  # adding titles and axis lables in desired colors/sizes
+  # #00659d blue color font used in LUCL poster template
+  # ggtitle("Voltage for Averaged Channels between the dominant classifier congruency") +
+  theme(plot.title = element_text(size = 15, face="bold", colour = '#00659d'),
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 12, face = "bold", colour = '#00659d'),
+        legend.position = "bottom",
+        panel.border = element_blank())
+ggsave("Figure8.jpg", width = 8, height = 6, dpi = 200)
+```
+
+```{r, echo=TRUE}
+rm(list = ls())
+load(file = "Exp02ExploratoryERPAnalysis.RData")
+
+library(effects)
+library(sjPlot)
+
+
+plot_model(ERPmodel.minusAll, type = c("est"), terms = c("ClassifierCongruency", "JSD"), ci.lvl = 0.95)
+
+plot_model(ERPmodel.minusAll, ci.lvl = 0.95, group.terms = c("ClassifierCongruency", "JSD"))
+ggsave("Figure8a.jpg", width = 20, height = 3, dpi = 200)
+```

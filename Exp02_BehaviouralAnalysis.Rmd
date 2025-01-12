@@ -1,0 +1,331 @@
+---
+title: "Exp02_Behavioral_Analysis"
+author: "Yufang Wang"
+date: "2023-08-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls())
+setwd('E:/Exp02/EEGCode/')
+```
+
+# General Notes {.tabset}
+## Production Task (Bare Noun Naming in PWI) Native Chinese Speakers
+This experiment was consisted of familiarization, practice, and experimental sessions. The experimental sessions was not a balanced design, instead, the entire 2-by-2 orthogonal table was only partically filled. The feasibility of this design has been investigated in the file "DOE_v2.Rmd" and reported together with behavioral and electrophysiological results
+
+##Testing Details and Participants
+
+* Participants: 36 Native Chinese speakers in the Netherlands
+* Testing Period: March 2023 - May 2023
+
+## Setting up the working environment
+
+```{r Productionpackages, results = 'hide', include = FALSE, message = FALSE}
+# check where packages are looked for
+.libPaths()
+
+# Install and load packages if needed using pacman - reproducible
+pacman::p_load("lattice","lme4", "emmeans", "dplyr", "ggplot2", "knitr", "printr", "kableExtra", "plotly", "extrafont", "devtools", "tibble", "effects", "tidyverse", "lmerTest", "car", "patchwork", "DHARMa", "tidyr", "data.table", "ggsignif", "sjPlot", "ggeffects", "broom.mixed", "fst")
+
+# Prevent scientific notation
+options(scipen = 999)
+
+# Increase memory
+memory.limit(70000) # only for Windows
+
+# Set options
+Sys.getlocale()
+Sys.setlocale("LC_ALL", "C") # deals with Spanish orthography
+#options(max.print = .Machine$integer.max)
+#options(datatable.print.topn = 450)
+
+# Set base theme
+theme_set(theme_minimal(base_size = 12))
+```
+
+
+# The Data {.tabset}
+
+```{r Production Data preprocessing, include = FALSE}
+# Load the Sequence csv file
+SequenceEXP2 = fread("Exp02_SeqSI.csv", sep = ",")
+#remove the first 4 trials in each block
+for (unwantseq in c(1, 2, 3, 4, 74, 75, 76, 77)){
+  print(unwantseq)
+  SequenceEXP2 = subset(SequenceEXP2, ExpTrialList != unwantseq)
+}
+rm(unwantseq);
+SequenceEXP2 <- SequenceEXP2[, -c("V1", "ExpTrialList")]
+head(SequenceEXP2)
+
+#get the "Target" and "Distractor" variable separately
+Target <- c(); Distractor <- c()
+for (rowID in 1:nrow(SequenceEXP2)){
+  Target <- c(Target, strsplit(as.character(SequenceEXP2[rowID, 4]), '_')[[1]][1])
+  Distractor <- c(Distractor, strsplit(as.character(SequenceEXP2[rowID, 4]), '_')[[1]][2])
+}
+SequenceEXP2$Target <- Target; SequenceEXP2$Distractor <- Distractor 
+rm(rowID); rm(Target); rm(Distractor); head(SequenceEXP2)
+
+# Load the Condition csv file
+DesignEXP2 = fread("DesignStimulation.csv", sep = ",")
+DesignEXP2 <- DesignEXP2[-which(DesignEXP2$Distractor == ""), ]
+DesignEXP2  <- DesignEXP2 [, -c("TargetC", "DistractorC")]
+DesignEXP2$Procedure <- "Chapter3"; head(DesignEXP2)
+
+#Load the semantic categories and number of storkes file for distractors
+SemCatEStork = fread("SemCatEStork.csv", sep = ",")
+
+DesignEXP2 <- merge(DesignEXP2, SemCatEStork, by = c("Target", "Distractor", "ClassifierCongruency", "JSD", "NumbersofStorks"))
+rm(SemCatEStork); head(DesignEXP2)
+
+# #Load the semantic categories and number of storkes file for distractors
+# FreqDistra <- fread("FreqDistra.csv", sep = ",")
+# FreqDistra <-  FreqDistra[, -c("DistractorC")]
+# 
+# DesignEXP2 <- merge(DesignEXP2, FreqDistra, by = c("Distractor"))
+# rm(FreqDistra); head(DesignEXP2)
+
+#replicated the dateframe across the subjects
+DesignEXP2Subj <- data.frame(sapply(DesignEXP2, rep.int, times = 36))
+DesignEXP2Subj$SubjID <- rep(11:46, each = 102)
+DesignEXP2Subj$Target = ifelse(as.character(DesignEXP2Subj$Targe) == "Alarm clock", "Alarmclock", as.character(DesignEXP2Subj$Targe))
+DesignEXP2Subj$Marker3 <- as.numeric(DesignEXP2Subj$Marker3)
+DesignSeq <- merge(SequenceEXP2, DesignEXP2Subj, by = c("SubjID", "Target", "Distractor", "Procedure", "Marker3"))
+rm(DesignEXP2); rm(DesignEXP2Subj); rm(SequenceEXP2); head(DesignSeq)
+
+# Load the  Production csv file
+ProductionEXP2 = fread("BehavioralData.csv", sep = ",")
+ProductionEXP2 <- ProductionEXP2[, -c("iTrigger", "lTrigger", "lResp")]
+ProductionEXP2$Accuricies = ifelse(ProductionEXP2$Accuricies == 0, 0, 1)
+
+ProductionEXP2$SoundFile_Name <- ifelse(as.character(ProductionEXP2$SoundFile_Name) == "Skates", "Skate", ProductionEXP2$SoundFile_Name)
+
+ProductionEXP2$SoundFile_Name <- ifelse(as.character(ProductionEXP2$SoundFile_Name) == "Alarm_clock", "Alarmclock", ProductionEXP2$SoundFile_Name)
+
+ProductionEXP2$SoundFile_Name <- ifelse(as.character(ProductionEXP2$SoundFile_Name) == "Fountain_pen", "Fountainpen", ProductionEXP2$SoundFile_Name)
+
+# Check out first few columns
+head(ProductionEXP2); 
+
+
+#merge together data
+BehavioralExp2 = merge(ProductionEXP2, DesignSeq, by = c("SubjID", "SoundFile_Name"), all = T)
+BehavioralExp2$Procedure = ifelse(str_detect(as.character(BehavioralExp2$SoundFile_Name),"\\d$"), "Chapter3","Chapter2")
+
+BehavioralExp2$Target = ifelse(as.character(BehavioralExp2$Procedure) == "Chapter2", BehavioralExp2$SoundFile_Name, BehavioralExp2$Target)
+BehavioralExp2 <- BehavioralExp2[-which(is.na(BehavioralExp2$Target)),]
+
+
+rm(ProductionEXP2); rm(DesignSeq); head(BehavioralExp2)
+
+write.csv(BehavioralExp2,"Exp02_BehavioralData_R.csv", row.names = FALSE)
+#
+
+```
+
+
+```{r}
+BehavioralExp_onlyExp <- BehavioralExp2[-which(BehavioralExp2$Procedure == "Chapter2"),]
+# Make sure variables are in the appropriate data type
+# dependent variables
+BehavioralExp_onlyExp$Accuricies <- as.numeric(as.vector(BehavioralExp_onlyExp$Accuricies))
+BehavioralExp_onlyExp$tResp <- as.numeric(as.vector(BehavioralExp_onlyExp$tResp*1000)) 
+
+# fixed variable
+BehavioralExp_onlyExp$JSD <- factor(BehavioralExp_onlyExp$JSD) 
+BehavioralExp_onlyExp$ClassifierCongruency <- factor(BehavioralExp_onlyExp$ClassifierCongruency) 
+BehavioralExp_onlyExp$JSDValue <- as.numeric(BehavioralExp_onlyExp$JSDValue)
+BehavioralExp_onlyExp$JSDValue <- (BehavioralExp_onlyExp$JSDValue - mean(BehavioralExp_onlyExp$JSDValue))/sd(BehavioralExp_onlyExp$JSDValue)
+
+
+# co-variates
+BehavioralExp_onlyExp$Frequency <- log(as.numeric(BehavioralExp_onlyExp$Frequency))
+BehavioralExp_onlyExp$NumbersofStorks <- as.numeric(BehavioralExp_onlyExp$NumbersofStorks)
+BehavioralExp_onlyExp$NumbersofStorks <- (BehavioralExp_onlyExp$NumbersofStorks - mean(BehavioralExp_onlyExp$NumbersofStorks))/sd(BehavioralExp_onlyExp$NumbersofStorks)
+BehavioralExp_onlyExp$CongruencySemanticCategories <- as.factor(BehavioralExp_onlyExp$CongruencySemanticCategories)
+BehavioralExp_onlyExp$LengthofDistrctor <- as.numeric(BehavioralExp_onlyExp$LengthofDistrctor)
+BehavioralExp_onlyExp$LengthofDistrctor <- (BehavioralExp_onlyExp$LengthofDistrctor - mean(BehavioralExp_onlyExp$LengthofDistrctor))/sd(BehavioralExp_onlyExp$LengthofDistrctor)
+
+
+#random variable
+BehavioralExp_onlyExp$Target <- as.factor(BehavioralExp_onlyExp$Target)
+BehavioralExp_onlyExp$SubjID <- as.factor(BehavioralExp_onlyExp$SubjID)
+
+
+
+# summary
+head(BehavioralExp_onlyExp)
+str(BehavioralExp_onlyExp)
+```
+
+```{r, build up the model, include=TRUE}
+# set sum coding
+contrasts(BehavioralExp_onlyExp$JSD) = contr.sum(2)
+contrasts(BehavioralExp_onlyExp$ClassifierCongruency) = contr.sum(2)
+contrasts(BehavioralExp_onlyExp$CongruencySemanticCategories) = contr.sum(2)
+
+#exclue particpants according to EEG
+BehavioralExp_onlyExp = subset(BehavioralExp_onlyExp, BehavioralExp_onlyExp$SubjID!=12)
+BehavioralExp_onlyExp = subset(BehavioralExp_onlyExp, BehavioralExp_onlyExp$SubjID!=44)
+
+Accuracy_modelElaborate <- glmer(Accuricies ~  + NumbersofStorks + Frequency + CongruencySemanticCategories + ClassifierCongruency + JSD  + CongruencySemanticCategories:ClassifierCongruency + (ClassifierCongruency + JSD|SubjID) + (ClassifierCongruency + JSD|Target), data = BehavioralExp_onlyExp, family = binomial(link = "logit"), nAGQ = 1, control = glmerControl(optimizer = "bobyqa", optCtrl=list(maxfun=2e5)))
+#boundary (singular) fit: see help('isSingular')
+
+Accuracy_model <- glmer(Accuricies ~ NumbersofStorks + Frequency + LengthofDistrctor + CongruencySemanticCategories + ClassifierCongruency + JSD + CongruencySemanticCategories:ClassifierCongruency + (ClassifierCongruency + JSD|SubjID) + (1|Target), data = BehavioralExp_onlyExp, family = binomial(link = "logit"), nAGQ = 1, control = glmerControl(optimizer = "bobyqa", optCtrl=list(maxfun=2e5)))
+#boundary (singular) fit: see help('isSingular')
+
+Accuracy_model.minusCor <- glmer(Accuricies ~ NumbersofStorks + Frequency + LengthofDistrctor + CongruencySemanticCategories + ClassifierCongruency + JSD + CongruencySemanticCategories:ClassifierCongruency + (ClassifierCongruency + JSD||SubjID) + (1|Target), data = BehavioralExp_onlyExp, family = binomial(link = "logit"), nAGQ = 1, control = glmerControl(optimizer = "bobyqa", optCtrl=list(maxfun=2e5)))
+#boundary (singular) fit: see help('isSingular')
+
+Accuracy_model.minusJSD <- glmer(Accuricies ~ NumbersofStorks + Frequency + LengthofDistrctor + CongruencySemanticCategories + ClassifierCongruency + JSD + CongruencySemanticCategories:ClassifierCongruency + (ClassifierCongruency|SubjID) + (1|Target), data = BehavioralExp_onlyExp, family = binomial(link = "logit"), nAGQ = 1, control = glmerControl(optimizer = "bobyqa", optCtrl=list(maxfun=2e5)))
+#boundary (singular) fit: see help('isSingular')
+
+
+Accuracy_model.minusAll <- glmer(Accuricies ~ NumbersofStorks + Frequency + LengthofDistrctor + CongruencySemanticCategories + ClassifierCongruency + JSD + CongruencySemanticCategories:ClassifierCongruency + (1|SubjID) + (1|Target), data = BehavioralExp_onlyExp, family = binomial(link = "logit"), nAGQ = 1, control = glmerControl(optimizer = "bobyqa", optCtrl=list(maxfun=2e5)))
+
+summary(Accuracy_model.minusAll)
+b = summary(Accuracy_model.minusAll)
+cbind(b$coefficients[, 1]-1.96*b$coefficients[, 2], b$coefficients[, 1]+1.96*b$coefficients[, 2])
+library(performance)
+model_performance(Accuracy_model.minusAll)
+```
+
+```{r, echo=TRUE}
+# ### obtain the marginalized beta
+# su = summary(Accuracy_model.minusAll)
+# var0_target = su$varcor$Target[1, 1]
+# var0_Subj = su$varcor$SubjID[1, 1]
+# 
+# cov_mat = diag(c(rep(var0_target, 38), rep(var0_Subj, 34)))
+# L = t(chol(cov_mat))
+# 
+# temp = ranef(Accuracy_model.minusAll)
+# bi = c(unlist(temp$Target), unlist(temp$SubjID))
+# # bi2 = c(unlist(temp$SubjID) - mean(unlist(temp$SubjID)),
+# #         unlist(temp$Target) - mean(unlist(temp$Target)))
+# theta = bi/c(rep(var0_target, 38), rep(var0_Subj, 34))
+# 
+# X = getME(Accuracy_model.minusAll, "X")
+# Z = getME(Accuracy_model.minusAll, "Z")
+# Betas = su$coefficients[, "Estimate"]
+# logOdd_y = X%*%Betas + Z%*%L%*%theta
+# logOdd_y2 = X%*%Betas + Z%*%bi
+# 
+# fai = function(vari){
+#   return(1/(1+exp(-vari)))
+# }
+# 
+# pai_pa= fai(X%*%Beta + Z%*%L%*%theta)
+# logits_lambda_pa = X%*%Betas + Z%*%L%*%theta
+# Beta_pa = solve(t(X)%*%X)%*%t(X)%*%logits_lambda_pa
+# 
+# ### Marginalized Standard Errors
+# var_eta = vcov(Accuracy_model.minusAll)
+
+
+```
+
+```{r}
+#--------------------remove the outliers---------
+BehavioralExp_onlyExp_RT = BehavioralExp_onlyExp[which(BehavioralExp_onlyExp$Accuricies == 1),]
+
+which(is.na(BehavioralExp_onlyExp_RT), arr.ind = T)
+#for subject
+Table_Subj_Mean <- aggregate(BehavioralExp_onlyExp_RT$tResp, by = list(BehavioralExp_onlyExp_RT$SubjID), mean)
+colnames(Table_Subj_Mean) <- c("SubjID", "mean")
+Table_Subj_SD <- aggregate(BehavioralExp_onlyExp_RT$tResp, by = list(BehavioralExp_onlyExp_RT$SubjID), sd) 
+colnames(Table_Subj_SD) <- c("SubjID", "SD")
+Table_Subj_Mean_SD <- merge(Table_Subj_Mean, Table_Subj_SD)
+Table_Subj_Mean_SD$outlierLowerbound <- Table_Subj_Mean_SD$mean-3*Table_Subj_Mean_SD$SD
+Table_Subj_Mean_SD$outlierupperbound <- Table_Subj_Mean_SD$mean+3*Table_Subj_Mean_SD$SD
+rm(Table_Subj_Mean, Table_Subj_SD)
+Table_Subj_Mean_SD <- Table_Subj_Mean_SD[, c("SubjID", "outlierLowerbound", "outlierupperbound")]
+
+#for item
+Table_Item_Mean <- aggregate(BehavioralExp_onlyExp_RT$tResp, by = list(BehavioralExp_onlyExp_RT$Target), mean)
+colnames(Table_Item_Mean) <- c("Item", "mean")
+Table_Item_SD <- aggregate(BehavioralExp_onlyExp_RT$tResp, by = list(BehavioralExp_onlyExp_RT$Target), sd)
+colnames(Table_Item_SD) <- c("Item", "SD")
+Table_Item_Mean_SD <- merge(Table_Item_Mean, Table_Item_SD)
+Table_Item_Mean_SD$outlierLowerbound <- Table_Item_Mean_SD$mean-3*Table_Item_Mean_SD$SD
+Table_Item_Mean_SD$outlierupperbound <- Table_Item_Mean_SD$mean+3*Table_Item_Mean_SD$SD
+rm(Table_Item_Mean, Table_Item_SD)
+Table_Item_Mean_SD <- Table_Item_Mean_SD[, c("Item", "outlierLowerbound", "outlierupperbound")]
+
+
+##remove outliers for subject and item
+SubjID <- BehavioralExp_onlyExp_RT$SubjID
+for (subj in SubjID){
+  BehavioralExp_onlyExp_RT[which(BehavioralExp_onlyExp_RT$SubjID==subj),'OutlierId'] = ifelse(((BehavioralExp_onlyExp_RT[which(BehavioralExp_onlyExp_RT$SubjID==subj),'tResp']< Table_Subj_Mean_SD[which(Table_Subj_Mean_SD$SubjID==subj),'outlierLowerbound'])|
+      (BehavioralExp_onlyExp_RT[which(BehavioralExp_onlyExp_RT$SubjID==subj),'tResp']> Table_Subj_Mean_SD[which(Table_Subj_Mean_SD$SubjID==subj),'outlierupperbound'])), 1, 0)}
+
+BehavioralExp_onlyExp_RT <- subset(BehavioralExp_onlyExp_RT, OutlierId != 1)
+
+for (it in BehavioralExp_onlyExp_RT$Target){
+  BehavioralExp_onlyExp_RT[which(BehavioralExp_onlyExp_RT$Target==it), "OutlierId"] =  ifelse(((BehavioralExp_onlyExp_RT[which(BehavioralExp_onlyExp_RT$Target==it),'tResp']< Table_Item_Mean_SD[which(Table_Item_Mean_SD$Item==it),'outlierLowerbound'])|(BehavioralExp_onlyExp_RT[which(BehavioralExp_onlyExp_RT$Target==it),'tResp']> Table_Item_Mean_SD[which(Table_Item_Mean_SD$Item==it),'outlierupperbound'])), 1, 0)}
+
+BehavioralExp_onlyExp_RT <- subset(BehavioralExp_onlyExp_RT, OutlierId != 1)
+head(BehavioralExp_onlyExp_RT)
+
+## remove SubjID that excluded in electrophysiological data
+```
+
+```{r}
+# build up models
+# set sum coding
+contrasts(BehavioralExp_onlyExp_RT$JSD) = contr.sum(2)
+contrasts(BehavioralExp_onlyExp_RT$ClassifierCongruency) = contr.sum(2)
+contrasts(BehavioralExp_onlyExp_RT$CongruencySemanticCategories) = contr.sum(2)
+
+Latency_modelElaborate <- glmer(tResp ~  NumbersofStorks + Frequency + LengthofDistrctor + CongruencySemanticCategories + ClassifierCongruency + JSD + CongruencySemanticCategories:ClassifierCongruency + ( ClassifierCongruency + JSD|SubjID) + (ClassifierCongruency + JSD|Target), data = BehavioralExp_onlyExp_RT, family = Gamma(link="identity"), nAGQ = 1, control = glmerControl(optimizer = "bobyqa", optCtrl=list(maxfun=2e5)))
+
+
+Latency_modelminTargte <- glmer(tResp ~ NumbersofStorks + Frequency + LengthofDistrctor + CongruencySemanticCategories + ClassifierCongruency + JSD + CongruencySemanticCategories:ClassifierCongruency + (ClassifierCongruency + JSD|SubjID) + (1|Target), data = BehavioralExp_onlyExp_RT, family = Gamma(link="identity"), nAGQ = 1, control = glmerControl(optimizer = "bobyqa", optCtrl=list(maxfun=2e5)))
+
+
+Latency_modelminusJSD <- glmer(tResp ~  NumbersofStorks + Frequency + LengthofDistrctor + CongruencySemanticCategories + ClassifierCongruency + JSD + CongruencySemanticCategories:ClassifierCongruency + (ClassifierCongruency|SubjID) + (1|Target), data = BehavioralExp_onlyExp_RT, family = Gamma(link="identity"), nAGQ = 1, control = glmerControl(optimizer = "bobyqa", optCtrl=list(maxfun=2e5)))
+
+Latency_modelminusAll <- glmer(tResp ~  NumbersofStorks + Frequency + LengthofDistrctor + CongruencySemanticCategories + ClassifierCongruency + JSD + CongruencySemanticCategories:ClassifierCongruency + (1|SubjID) + (1|Target), data = BehavioralExp_onlyExp_RT, family = Gamma(link="identity"), nAGQ = 1, control = glmerControl(optimizer = "bobyqa", optCtrl=list(maxfun=2e5)))
+
+#model selection
+anova(Latency_modelminusJSD, Latency_modelminTargte)
+lrt = anova(Latency_modelminusJSD, Latency_modelminTargte)$Chisq[2]
+0.5*pchisq(lrt, 3, lower.tail = FALSE) + 0.5*pchisq(lrt, 1, lower.tail = FALSE) # select Latency_modelminusJSD
+
+anova(Latency_modelminusJSD, Latency_modelminusAll)
+lrt = anova(Latency_modelminusJSD, Latency_modelminusAll)$Chisq[2]
+0.5*pchisq(lrt, 2, lower.tail = FALSE) + 0.5*pchisq(lrt, 1, lower.tail = FALSE)# select Latency_modelminusAll
+
+
+summary(Latency_modelminusAll)
+a =summary(Latency_modelminusAll)
+cbind(a$coefficients[, 1]-1.96*a$coefficients[, 2], a$coefficients[, 1]+1.96*a$coefficients[, 2])
+library(performance)
+model_performance(Latency_modelminusAll)
+
+save.image(file = "./Output/Exp02BehavioralAnalysis_.RData")
+```
+
+```{r}
+# Latency_modelElaborate_val <- glmer(tResp ~  NumbersofStorks + Frequency + ClassifierCongruency + scale(JSDValue)+ CongruencySemanticCategories +( ClassifierCongruency + scale(JSDValue)|SubjID) + (ClassifierCongruency + 1|Target), data = BehavioralExp_onlyExp_RT, family = Gamma(link="identity"), nAGQ = 1, control = glmerControl(optimizer = "bobyqa", optCtrl=list(maxfun=2e5)))
+# 
+# Latency_modelminTargte_val <- glmer(tResp ~  scale(NumbersofStorks) + log(Frequency) + ClassifierCongruency + scale(JSDValue) + CongruencySemanticCategories + (ClassifierCongruency + scale(JSDValue)|SubjID) + (1|Target), data = BehavioralExp_onlyExp_RT, family = Gamma(link="identity"), nAGQ = 1, control = glmerControl(optimizer = "bobyqa", optCtrl=list(maxfun=2e5)))
+# #Warning: Model failed to converge with max|grad| = 0.0381183 (tol = 0.002, component 1)
+# 
+# Latency_modelminusJSD_val <- glmer(tResp ~   scale(NumbersofStorks) + log(Frequency) + ClassifierCongruency + scale(JSDValue) + CongruencySemanticCategories + (ClassifierCongruency|SubjID) + (1|Target), data = BehavioralExp_onlyExp_RT, family = Gamma(link="identity"), nAGQ = 1, control = glmerControl(optimizer = "bobyqa", optCtrl=list(maxfun=2e5)))
+# 
+# Latency_modelminusAll_val <- glmer(tResp ~  + scale(NumbersofStorks) + log(Frequency) + ClassifierCongruency + scale(JSDValue) + CongruencySemanticCategories + (1|SubjID) + (1|Target), data = BehavioralExp_onlyExp_RT, family = Gamma(link="identity"), nAGQ = 1, control = glmerControl(optimizer = "bobyqa", optCtrl=list(maxfun=2e5)))
+# 
+# lrt = anova(Latency_modelElaborate_val, Latency_modelminusJSD_val)$Chisq[2]
+# 0.5*pchisq(lrt, 5) + 0.5*pchisq(lrt, 1)#Latency_modelminusJSD_val
+# 
+# lrt = anova(Latency_modelminusJSD_val, Latency_modelminusAll_val)$Chisq[2]
+# 0.5*pchisq(lrt, 2) + 0.5*pchisq(lrt, 1)#Latency_modelminusAll_val
+# 
+# summary(Latency_modelminusAll_val)
+# 
+# save.image(file = "Exp02BehavioralAnalysis.RData")
+```
