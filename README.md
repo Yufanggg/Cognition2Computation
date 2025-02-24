@@ -19,6 +19,9 @@ This project is updated from codes used in my PhD work (from cognition to comput
 - [Project Structure](#project-structure)
 - [Results](#Results)
 
+## Languages
+[![Top Langs](https://github-readme-stats.vercel.app/api/top-langs/?username=Yufanggg)](https://github.com/Yufanggg/Cognition2Computation)
+
 ## Requirments
 To run this Project, you will need the following:
 - R (> 3.6)
